@@ -1,0 +1,115 @@
+name: Gerar APK Voz de Terror
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Criar projeto Android
+        run: |
+          mkdir -p app && cd app
+          mkdir -p src/main/java/com/vozdeterror
+
+          cat > settings.gradle <<'EOF'
+          pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
+          dependencyResolutionManagement { repositories { google(); mavenCentral() } }
+          rootProject.name = "VozDeTerror"
+          EOF
+
+          cat > gradle.properties <<'EOF'
+          org.gradle.jvmargs=-Xmx2g
+          android.useAndroidX=false
+          EOF
+
+          cat > build.gradle <<'EOF'
+          plugins { id 'com.android.application' version '8.5.2' }
+          android {
+            namespace 'com.vozdeterror'
+            compileSdk 34
+            defaultConfig {
+              applicationId 'com.vozdeterror'
+              minSdk 26
+              targetSdk 34
+              versionCode 1
+              versionName '1.0'
+            }
+            compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+            lint { abortOnError false; checkReleaseBuilds false }
+          }
+          tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8' }
+          EOF
+
+          cat > src/main/AndroidManifest.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+            <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+            <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
+            <application android:label="Voz de Terror" android:theme="@android:style/Theme.Material.NoActionBar">
+              <activity android:name=".MainActivity" android:exported="true" android:screenOrientation="portrait">
+                <intent-filter>
+                  <action android:name="android.intent.action.MAIN"/>
+                  <category android:name="android.intent.category.LAUNCHER"/>
+                </intent-filter>
+              </activity>
+            </application>
+          </manifest>
+          EOF
+
+          cat > src/main/java/com/vozdeterror/MainActivity.java <<'EOF'
+          package com.vozdeterror;
+
+          import android.Manifest;
+          import android.app.Activity;
+          import android.content.pm.PackageManager;
+          import android.graphics.Color;
+          import android.graphics.Typeface;
+          import android.media.*;
+          import android.os.*;
+          import android.view.*;
+          import android.widget.*;
+          import java.util.*;
+
+          public class MainActivity extends Activity {
+            static final int SR = 48000;
+            volatile boolean running = false;
+            Thread th;
+            volatile float pitch = 4, dbl = 0, ring = .12f, rev = .15f, vol = 2.6f, gate = 0, hpF = 260, presDb = 7;
+            volatile boolean dirty = true;
+            AudioManager am;
+            Spinner micSp;
+            final List<AudioDeviceInfo> mics = new ArrayList<>();
+            TextView msg;
+            Button go;
+            SeekBar sbPitch, sbVol, sbGate, sbRev;
+            TextView tvPitch, tvVol, tvGate, tvRev;
+            final String[] names = {"🤡 Palhaço Risonho", "🎈 Palhaço do Esgoto", "🎪 Palhaço do Circo", "🔪 Assassino Mascarado"};
+            // pitch, dbl, ring, rev, vol, hp, presenca
+            final float[][] pre = {
+              {4, 0, .12f, .15f, 2.6f, 260, 7},
+              {-3, .35f, 0, .20f, 2.6f, 220, 6},
+              {6, .20f, .18f, .25f, 2.5f, 280, 8},
+              {-8, 0, 0, .10f, 2.6f, 170, 5}};
+            final List<Button> presetBtns = new ArrayList<>();
+            static final int RED = Color.rgb(255, 59, 59), CARD = Color.rgb(26, 18, 20), BG = Color.rgb(13, 10, 11), FG = Color.rgb(234, 223, 216), MUT = Color.rgb(154, 135, 128);
+
+            @Override protected void onCreate(Bundle s) {
+              super.onCreate(s);
+              getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+              setVolumeControlStream(AudioManager.STREAM_MUSIC);
